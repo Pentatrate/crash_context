@@ -28,64 +28,70 @@ payload = '''
 local function getContext(contextAmount, minDepth, fullStack, lineNumbers)
 	if not utilitools then return "error: utilitools not loaded" end
 	local pathInfos = utilitools.string.split(debug.traceback(), "\n")
-	table.remove(pathInfos, 1)
 
-	contextAmount = contextAmount or 0
-	minDepth = minDepth or 1
+	local success, text = utilitools.try(mods.crash_context, function()
+		table.remove(pathInfos, 1)
 
-	local function getSingleContext(depth)
-		depth = depth or 1
-		local pathInfo = pathInfos[depth]
+		contextAmount = contextAmount or 0
+		minDepth = minDepth or 1
 
-		if not pathInfo then return false, true, "error: invalid depth (" .. depth .. "/" .. #pathInfos .. ")" end
-		local errorPos = utilitools.string.split(pathInfo:sub(2), ":")
-		errorPos[1] = errorPos[1]:gsub("\\", "/")
-		errorPos[2] = tonumber(errorPos[2])
-		local errorPosString = errorPos[1] .. ":" .. errorPos[2] .. ":"
+		local function getSingleContext(depth)
+			depth = depth or 1
+			local pathInfo = pathInfos[depth]
 
-		local dumpPath = "Mods/lovely/dump/" .. errorPos[1]
-		local inDump = love.filesystem.getInfo(dumpPath)
-		local filePath = inDump and dumpPath or errorPos[1]
-		if not love.filesystem.getInfo(filePath) then return false, false, errorPosString .. " error: file not in filesystem" end
+			if not pathInfo then return false, true, "error: invalid depth (" .. depth .. "/" .. #pathInfos .. ")" end
+			local errorPos = utilitools.string.split(pathInfo:sub(2), ":")
+			errorPos[1] = errorPos[1]:gsub("\\", "/") or "unknown file"
+			errorPos[2] = tonumber(errorPos[2])
+			local errorPosString = errorPos[1] .. ":" ..( errorPos[2] or " unknown line") .. ":"
 
-		local contents = love.filesystem.read(filePath)
-		if type(contents) ~= "string" then return false, false, errorPosString .. " error: file (" .. filePath .. ") might have incompatible encoding" end
+			local dumpPath = "Mods/lovely/dump/" .. errorPos[1]
+			local inDump = love.filesystem.getInfo(dumpPath)
+			local filePath = inDump and dumpPath or errorPos[1]
+			if not love.filesystem.getInfo(filePath) then return false, false, errorPosString .. " error: file not in filesystem" end
 
-		local lines = {}
-		local context = {}
-		for line in love.filesystem.lines(filePath) do
-			table.insert(lines, line)
+			local contents = love.filesystem.read(filePath)
+			if type(contents) ~= "string" then return false, false, errorPosString .. " error: file (" .. filePath .. ") might have incompatible encoding" end
+
+			local lines = {}
+			local context = {}
+			for line in love.filesystem.lines(filePath) do
+				table.insert(lines, line)
+			end
+			for i = math.max(1, errorPos[2] - contextAmount), math.min(#lines, errorPos[2] + contextAmount) do
+				local prepend = lineNumbers and i .. "\t|" or ""
+				local append = ""
+				if i == errorPos[2] then append = " <<<<< <<<<< HERE <<<<< <<<<<" end
+				table.insert(context, prepend .. lines[i] .. append)
+			end
+			return true, false, "Context: " .. errorPosString .. "\n" .. table.concat(context, "\n")
 		end
-		for i = math.max(1 errorPos[2] - contextAmount), math.min(#lines, errorPos[2] + contextAmount) do
-			local prepend = lineNumbers and i .. "\t|" or ""
-			local append = ""
-			if i == errorPos[2] then append = " <<<<< <<<<< HERE <<<<< <<<<<" end
-			table.insert(context, prepend .. lines[i] .. append)
-		end
-		return true, false, "Context: " .. errorPosString .. "\n" .. table.concat(context, "\n")
-	end
 
-	if fullStack then
-		local contexts = {}
-		for depth = minDepth, #pathInfos do
-			local success, abort, context = getSingleContext(depth)
-			if abort then break end
-			table.insert(contexts, context)
+		if fullStack then
+			local contexts = {}
+			for depth = minDepth, #pathInfos do
+				local success, abort, context = getSingleContext(depth)
+				if abort then break end
+				table.insert(contexts, context)
+			end
+			return "Contexts: " .. table.concat(contexts, "\n")
+		else
+			local firstError
+			local depth = minDepth
+			while true do
+				local success, abort, context = getSingleContext(depth)
+				firstError = firstError or context
+				if abort then return firstError end
+				if success then return context end
+				depth = depth + 1
+			end
 		end
-		return "Contexts: " .. table.concat(contexts, "\n")
-	else
-		local firstError
-		while true do
-			local success, abort, context = getSingleContext(depth)
-			firstError = firstError or context
-			if abort then return firstError end
-			if success then return context end
-		end
-	end
+	end)
+	return success and text or ""
 end
 
 if modlog and mods.crash_context.config.context then
-	modlog(mods.beattools, getContext(mods.crash_context.config.surroundingLines, 3, mods.crash_context.config.fullStack, mods.crash_context.config.lineNumbers))
+	modlog(mods.crash_context, getContext(mods.crash_context.config.surroundingLines, 3, mods.crash_context.config.fullStack, mods.crash_context.config.lineNumbers))
 end'''
 position = "after"
 target = "main.lua"
