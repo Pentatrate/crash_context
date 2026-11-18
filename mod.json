@@ -1,7 +1,7 @@
 {
 	"id": "crash_context",
 	"name": "Crash Context",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"author": "Pentatrate",
 	"description": "Provides the code snippet around the crashing line.",
 	"config": {}
